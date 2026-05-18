@@ -1,0 +1,15 @@
+{
+  "name": "ecosense-ai",
+  "private": true,
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && python app.py",
+    "frontend": "cd frontend && npm run dev",
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "serve": "npm --prefix frontend run serve"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
