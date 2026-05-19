@@ -22,7 +22,7 @@ function App() {
         </Routes>
       </main>
       <footer className="border-t border-slate-700 bg-[#1e293b] px-4 py-5 text-center text-sm font-medium text-green-300 shadow-inner">
-        EcoSense AI © 2026 | Built for Environment Hackathon | Parul University
+        EcoSense AI 2026
       </footer>
     </div>
   );

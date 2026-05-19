@@ -18,6 +18,13 @@ const fileToBase64 = (imageFile) =>
     reader.readAsDataURL(imageFile);
   });
 
+const getErrorMessage = (error) => {
+  if (!error) return 'OpenRouter API request failed';
+  if (typeof error === 'string') return error;
+  if (error.message) return error.message;
+  return JSON.stringify(error);
+};
+
 function WasteScanner() {
   const [imageUrl, setImageUrl] = useState(null);
   const [result, setResult] = useState(null);
@@ -36,55 +43,23 @@ function WasteScanner() {
   async function classifyImage(imageFile) {
     setLoading(true);
     try {
-      const geminiKey = import.meta.env.VITE_GEMINI_KEY;
-
-      if (!geminiKey) {
-        throw new Error('Missing VITE_GEMINI_KEY');
-      }
-
       const base64 = await fileToBase64(imageFile);
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inline_data: {
-                      mime_type: imageFile.type || 'image/jpeg',
-                      data: base64
-                    }
-                  },
-                  {
-                    text: `You are a waste classification expert.
-Look at this image carefully and classify the waste item.
-
-Reply ONLY in this exact JSON format, no extra text:
-{
-  "category": "plastic" or "paper" or "metal" or "glass" or "food" or "electronic" or "other",
-  "itemName": "exact name of the item you see",
-  "confidence": number between 0 and 100
-}`
-                  }
-                ]
-              }
-            ]
-          })
-        }
-      );
+      const response = await fetch('http://localhost:5000/api/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: base64,
+          mediaType: imageFile.type || 'image/jpeg'
+        })
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error?.message || 'Gemini API request failed');
+        throw new Error(getErrorMessage(data?.error));
       }
 
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      const clean = text.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
+      const parsed = data;
       const key = CATEGORY_GUIDANCE[parsed.category] ? parsed.category : 'other';
 
       setResult({

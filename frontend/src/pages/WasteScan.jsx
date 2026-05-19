@@ -185,6 +185,13 @@ const fileToBase64 = (imageFile) =>
     reader.readAsDataURL(imageFile);
   });
 
+const getErrorMessage = (error) => {
+  if (!error) return 'Unknown error';
+  if (typeof error === 'string') return error;
+  if (error.message) return error.message;
+  return JSON.stringify(error);
+};
+
 function WasteScan() {
   const [imageUrl, setImageUrl] = useState(null);
   const [imageFile, setImageFile] = useState(null);
@@ -196,8 +203,11 @@ function WasteScan() {
   const [scanCount, setScanCount] = useState(0);
   const [pointsEarned, setPointsEarned] = useState(null);
   const [scanHistory, setScanHistory] = useState([]);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
   const fileInputRef = useRef(null);
   const imageRef = useRef(null);
+  const videoRef = useRef(null);
   const celebrationTimeout = useRef(null);
 
   const levelInfo = getLevelInfo(totalPoints);
@@ -211,6 +221,18 @@ function WasteScan() {
       window.speechSynthesis.cancel();
     }
   }, []);
+
+  useEffect(() => {
+    if (showCamera && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [showCamera, cameraStream]);
+
+  useEffect(() => () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+    }
+  }, [cameraStream]);
 
   const handleImageFile = (file) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -237,13 +259,47 @@ function WasteScan() {
     fileInputRef.current?.click();
   };
 
-  const openCamera = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    input.onchange = handleImageSelect;
-    input.click();
+  const openCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true
+      });
+
+      setShowCamera(true);
+      setCameraStream(stream);
+    } catch (error) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = handleImageSelect;
+      input.click();
+    }
+  };
+
+  const closeCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+    }
+    setShowCamera(false);
+    setCameraStream(null);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], 'camera-capture.jpg', {
+        type: 'image/jpeg'
+      });
+      handleImageFile(file);
+      closeCamera();
+    }, 'image/jpeg');
   };
 
   const classifyWaste = async (selectedImageFile) => {
@@ -256,61 +312,36 @@ function WasteScan() {
     let data;
 
     try {
-      const geminiKey = import.meta.env.VITE_GEMINI_KEY;
-
-      if (!geminiKey) {
-        throw new Error('Missing VITE_GEMINI_KEY');
-      }
-
       const base64 = await fileToBase64(selectedImageFile);
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inline_data: {
-                      mime_type: selectedImageFile.type,
-                      data: base64
-                    }
-                  },
-                  {
-                    text: `You are a waste classification expert.
-Look at this image and classify the waste.
-Reply ONLY in JSON, no extra text:
-{
-  "category": "plastic" or "paper" or "metal" or "glass" or "food" or "electronic" or "other",
-  "itemName": "name of item",
-  "confidence": 85
-}`
-                  }
-                ]
-              }
-            ]
-          })
-        }
-      );
 
+      console.log('Calling backend...');
+
+      const response = await fetch('http://localhost:5000/api/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: base64,
+          mediaType: selectedImageFile.type
+        })
+      });
+
+      console.log('Response status:', response.status);
       data = await response.json();
-      console.log('API Response:', JSON.stringify(data));
+      console.log('Result:', data);
 
-      if (!response.ok) {
-        throw new Error(data?.error?.message || 'Gemini API request failed');
+      if (data.error) {
+        console.error('API Error:', data.error);
+        setError('Classification failed: ' + getErrorMessage(data.error));
+        return;
       }
 
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      const clean = text.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
+      const parsed = data;
       const category = allowedCategories.has(parsed.category) ? parsed.category : 'other';
 
       const nextResult = {
         category,
-        itemName: parsed.itemName,
-        confidence: parsed.confidence,
+        itemName: parsed.itemName || 'Unknown item',
+        confidence: parsed.confidence || 0,
         ...wasteCategories[category]
       };
       const earnedPoints = pointsMap[category] ?? pointsMap.other;
@@ -338,11 +369,8 @@ Reply ONLY in JSON, no extra text:
         setPointsEarned(null);
       }, 2600);
     } catch (error) {
-      console.error('Full error:', JSON.stringify(error));
-      console.error('Error:', error);
-      console.error('Data received:', JSON.stringify(data));
-      console.error('Data:', data);
-      setError('Error: ' + (error.message || 'Unknown error'));
+      console.error('Fetch error:', error);
+      setError('Cannot connect to backend. Make sure Flask is running!');
     } finally {
       setLoading(false);
     }
@@ -367,6 +395,68 @@ Reply ONLY in JSON, no extra text:
 
   return (
     <div className="space-y-8">
+      {showCamera && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.9)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            style={{
+              width: '80%',
+              maxWidth: '500px',
+              borderRadius: '12px',
+              border: '2px solid #16a34a'
+            }}
+          />
+          <div style={{
+            display: 'flex',
+            gap: '20px',
+            marginTop: '20px'
+          }}>
+            <button
+              onClick={capturePhoto}
+              style={{
+                background: '#16a34a',
+                color: 'white',
+                padding: '15px 30px',
+                borderRadius: '50px',
+                border: 'none',
+                fontSize: '16px',
+                cursor: 'pointer'
+              }}
+            >
+              Capture Photo
+            </button>
+            <button
+              onClick={closeCamera}
+              style={{
+                background: '#ef4444',
+                color: 'white',
+                padding: '15px 30px',
+                borderRadius: '50px',
+                border: 'none',
+                fontSize: '16px',
+                cursor: 'pointer'
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       <section className="rounded-3xl border border-green-400/20 bg-gradient-to-br from-[#064e3b] to-[#052e2b] p-5 text-white shadow-xl md:p-6">
         <p className="text-sm uppercase tracking-[0.24em] text-green-200">AI Waste Classifier</p>
         <h1 className="mt-3 text-3xl font-bold text-white md:text-4xl">Waste Scanner</h1>

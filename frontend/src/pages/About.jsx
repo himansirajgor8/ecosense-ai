@@ -33,7 +33,6 @@ function About() {
       >
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-green-100">EcoSense AI</p>
         <h1 className="mt-4 text-3xl font-bold tracking-tight text-white md:text-5xl">About EcoSense AI</h1>
-        <p className="mt-4 text-lg font-medium text-green-100 md:text-xl">Built for Environment Hackathon 2026</p>
       </section>
 
       <section className="rounded-3xl border border-slate-700 bg-[#1e293b] p-6 shadow-xl md:p-8">
@@ -55,16 +54,6 @@ function About() {
               <p className="mt-2 text-slate-300">{member.university}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-green-400/20 bg-green-500/10 p-6 shadow-lg md:p-8">
-        <h2 className="text-2xl font-bold text-green-300 md:text-3xl">Environment Hackathon 2026</h2>
-        <div className="mt-5 grid grid-cols-1 gap-4 text-base font-medium text-slate-300 md:grid-cols-2 md:text-lg">
-          <p>Parul University, Gujarat</p>
-          <p>Theme: Designing Sustainable Futures in a Digital Age</p>
-          <p>Finals: Geneva, Switzerland</p>
-          <p>November 6-9, 2026</p>
         </div>
       </section>
 
