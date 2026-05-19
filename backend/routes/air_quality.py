@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 air_quality_bp = Blueprint('air_quality', __name__)
 
-WAQI_TOKEN = os.getenv('WAQI_TOKEN') or os.getenv('VITE_WAQI_TOKEN') or '3aae4bcf330896f9b401609544929c52654ef10a'
+WAQI_TOKEN = os.getenv('WAQI_TOKEN') or os.getenv('VITE_WAQI_TOKEN')
 NOT_FOUND_MESSAGE = 'No air quality data found for this location. Try a nearby bigger city.'
 CITY_ALIASES = [
     (re.compile(r'\bahemdabad\b', re.IGNORECASE), 'Ahmedabad'),

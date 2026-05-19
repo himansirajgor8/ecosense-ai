@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { formatCityName } from '../utils/city.js';
 
 function getMarkerColor(aqi) {
   if (aqi <= 50) return '#16a34a';
@@ -48,6 +49,7 @@ function MapView({ airQuality, selectedCity }) {
   const mapZoom = hasMarker ? 12 : 5;
   const aqi = Number(airQuality?.aqi) || 0;
   const aqiStatus = getAqiStatus(aqi);
+  const displayCityName = formatCityName(airQuality?.cityName || selectedCity);
 
   return (
     <div className="relative h-[250px] overflow-hidden rounded-3xl border border-slate-700 shadow-sm md:h-96">
@@ -65,7 +67,7 @@ function MapView({ airQuality, selectedCity }) {
           >
             <Popup>
               <div className="space-y-2 text-sm">
-                <div className="text-base font-semibold text-slate-900">{airQuality.cityName || selectedCity}</div>
+                <div className="text-base font-semibold text-slate-900">{displayCityName}</div>
                 {airQuality.stationName && (
                   <div className="text-xs text-slate-500">Nearest station: {airQuality.stationName}</div>
                 )}

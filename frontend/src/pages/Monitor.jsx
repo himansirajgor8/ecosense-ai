@@ -10,6 +10,7 @@ import {
   notFoundMessage,
   searchCity
 } from '../api/waqi.js';
+import { formatCityName } from '../utils/city.js';
 
 function buildTrend(pm25) {
   const now = new Date();
@@ -56,7 +57,7 @@ function Monitor() {
 
       setAirQuality(data);
       setSelectedCity(fallbackName);
-      setSearchQuery(fallbackName);
+      setSearchQuery(formatCityName(fallbackName));
       setTrendData(buildTrend(data.pm25));
       setScore(Math.max(30, Math.min(100, Math.round(90 - data.pm25 * 0.35))));
       if (data.locationOnly) {
@@ -87,7 +88,7 @@ function Monitor() {
       clearTimeout(searchTimeout.current);
     }
 
-    if (query.length < 2 || query === selectedCity) {
+    if (query.length < 2 || query === selectedCity || query === formatCityName(selectedCity)) {
       setSuggestions([]);
       setSearching(false);
       return undefined;
@@ -152,6 +153,7 @@ function Monitor() {
     no2: { title: 'NO2', unit: 'ppb', value: airQuality?.no2 ?? 0 },
     co2: { title: 'CO', unit: 'ppm', value: airQuality?.co2 ?? 400 }
   };
+  const displayCityName = formatCityName(selectedCity);
 
   return (
     <div className="space-y-8">
@@ -159,7 +161,7 @@ function Monitor() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] text-green-200">City Dashboard</p>
-            <h1 className="mt-3 text-3xl font-bold text-white">{selectedCity}</h1>
+            <h1 className="mt-3 text-3xl font-bold text-white">{displayCityName}</h1>
             <p className="mt-1 text-sm text-green-100">Air quality data from nearest monitoring station</p>
             <p className="mt-2 text-slate-200">Live WAQI air quality cards, pollution trend chart, and interactive city map.</p>
           </div>
@@ -178,7 +180,7 @@ function Monitor() {
                   }}
                   onKeyDown={handleSearchSubmit}
                   onBlur={() => setTimeout(() => { setSuggestions([]); setSelectedSuggestionIndex(-1); }, 150)}
-                  placeholder="Enter any city..."
+                  placeholder={`Search ${displayCityName || 'city'}...`}
                   spellCheck={false}
                   autoCorrect="off"
                   autoCapitalize="off"

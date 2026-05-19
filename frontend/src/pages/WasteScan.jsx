@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const wasteCategories = {
   plastic: {
@@ -95,6 +95,88 @@ const wasteCategories = {
 
 const allowedCategories = new Set(Object.keys(wasteCategories));
 
+const environmentalImpact = {
+  plastic: {
+    co2Saved: 0.3,
+    waterSaved: 1,
+    energySaved: '2.5 hours of TV',
+    treesEquivalent: '1 tree per 100 bottles',
+    funFact: 'Plastic takes 400+ years to decompose!'
+  },
+  paper: {
+    co2Saved: 0.5,
+    waterSaved: 10,
+    energySaved: '4 hours of laptop use',
+    treesEquivalent: '17 trees per ton recycled',
+    funFact: 'Recycling 1 ton of paper saves 17 trees!'
+  },
+  metal: {
+    co2Saved: 0.8,
+    waterSaved: 5,
+    energySaved: '95% energy saved vs new aluminum',
+    treesEquivalent: 'Aluminum recycles infinitely!',
+    funFact: 'Recycling aluminum saves 95% energy!'
+  },
+  glass: {
+    co2Saved: 0.2,
+    waterSaved: 2,
+    energySaved: '1.5 hours of TV',
+    treesEquivalent: 'Glass recycles infinitely!',
+    funFact: 'Glass can be recycled forever!'
+  },
+  food: {
+    co2Saved: 0.4,
+    waterSaved: 0,
+    energySaved: 'Composting saves landfill space',
+    treesEquivalent: 'Compost = natural fertilizer',
+    funFact: 'Food waste = 8% of global emissions!'
+  },
+  electronic: {
+    co2Saved: 1.2,
+    waterSaved: 0,
+    energySaved: 'Recovers precious metals',
+    treesEquivalent: 'E-waste has toxic materials!',
+    funFact: '1 million phones = 35kg gold recovered!'
+  },
+  other: {
+    co2Saved: 0.1,
+    waterSaved: 0,
+    energySaved: 'Reduce reuse recycle!',
+    treesEquivalent: 'Every small action counts!',
+    funFact: 'Small actions = big impact!'
+  }
+};
+
+const pointsMap = {
+  plastic: 10,
+  paper: 8,
+  metal: 15,
+  glass: 12,
+  food: 7,
+  electronic: 20,
+  other: 5
+};
+
+const getLevelInfo = (points) => {
+  if (points < 20) return { level: 'Eco Beginner', icon: '🌱', next: 20 };
+  if (points < 50) return { level: 'Eco Learner', icon: '🌿', next: 50 };
+  if (points < 100) return { level: 'Eco Warrior', icon: '🌍', next: 100 };
+  if (points < 200) return { level: 'Eco Champion', icon: '🏆', next: 200 };
+  return { level: 'Eco Legend', icon: '⭐', next: null };
+};
+
+const speakResult = (category, itemName) => {
+  if (!('speechSynthesis' in window)) return;
+
+  const text = `This is ${itemName}. It is ${category} waste. Please dispose it in the correct bin. Thank you for recycling!`;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.9;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+};
+
 const fileToBase64 = (imageFile) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -110,8 +192,25 @@ function WasteScan() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [scanCount, setScanCount] = useState(0);
+  const [pointsEarned, setPointsEarned] = useState(null);
+  const [scanHistory, setScanHistory] = useState([]);
   const fileInputRef = useRef(null);
   const imageRef = useRef(null);
+  const celebrationTimeout = useRef(null);
+
+  const levelInfo = getLevelInfo(totalPoints);
+  const impact = result ? environmentalImpact[result.category] || environmentalImpact.other : null;
+
+  useEffect(() => () => {
+    if (celebrationTimeout.current) {
+      clearTimeout(celebrationTimeout.current);
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
 
   const handleImageFile = (file) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -157,7 +256,7 @@ function WasteScan() {
     let data;
 
     try {
-      const geminiKey = 'AIzaSyAIdWSXxCWyRwse0TpTAAyMlxkQ9-ypWuk';
+      const geminiKey = import.meta.env.VITE_GEMINI_KEY;
 
       if (!geminiKey) {
         throw new Error('Missing VITE_GEMINI_KEY');
@@ -208,12 +307,36 @@ Reply ONLY in JSON, no extra text:
       const parsed = JSON.parse(clean);
       const category = allowedCategories.has(parsed.category) ? parsed.category : 'other';
 
-      setResult({
+      const nextResult = {
         category,
         itemName: parsed.itemName,
         confidence: parsed.confidence,
         ...wasteCategories[category]
-      });
+      };
+      const earnedPoints = pointsMap[category] ?? pointsMap.other;
+
+      setResult(nextResult);
+      setTotalPoints((prev) => prev + earnedPoints);
+      setScanCount((prev) => prev + 1);
+      setPointsEarned(earnedPoints);
+      setScanHistory((prev) => [
+        {
+          item: nextResult.itemName,
+          category,
+          icon: wasteCategories[category].icon,
+          time: new Date().toLocaleTimeString(),
+          points: earnedPoints
+        },
+        ...prev
+      ].slice(0, 5));
+      speakResult(category, nextResult.itemName);
+
+      if (celebrationTimeout.current) {
+        clearTimeout(celebrationTimeout.current);
+      }
+      celebrationTimeout.current = setTimeout(() => {
+        setPointsEarned(null);
+      }, 2600);
     } catch (error) {
       console.error('Full error:', JSON.stringify(error));
       console.error('Error:', error);
@@ -248,6 +371,31 @@ Reply ONLY in JSON, no extra text:
         <p className="text-sm uppercase tracking-[0.24em] text-green-200">AI Waste Classifier</p>
         <h1 className="mt-3 text-3xl font-bold text-white md:text-4xl">Waste Scanner</h1>
         <p className="mt-2 text-slate-200">Scan any waste item to know how to dispose it</p>
+      </section>
+
+      <section className="relative overflow-hidden rounded-xl border border-green-500 bg-[#1e293b] p-4 shadow-xl">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-green-200">Your Green Points</p>
+            <h2 className="mt-1 text-3xl font-bold text-white">🌟 {totalPoints} pts</h2>
+          </div>
+          <div className="text-center">
+            <p className="text-4xl">{levelInfo.icon}</p>
+            <p className="font-bold text-green-500">{levelInfo.level}</p>
+            {levelInfo.next && (
+              <p className="mt-1 text-xs text-slate-400">{levelInfo.next - totalPoints} pts to next level</p>
+            )}
+          </div>
+          <div className="sm:text-right">
+            <p className="text-sm text-slate-400">Items Scanned</p>
+            <h2 className="mt-1 text-3xl font-bold text-white">{scanCount}</h2>
+          </div>
+        </div>
+        {pointsEarned && (
+          <div className="absolute right-4 top-4 animate-bounce rounded-full bg-green-500 px-4 py-2 text-sm font-bold text-white shadow-lg">
+            🎉 +{pointsEarned} Green Points earned!
+          </div>
+        )}
       </section>
 
       <section className="rounded-3xl border border-slate-700 bg-[#1e293b] p-4 shadow-xl md:p-6">
@@ -359,6 +507,13 @@ Reply ONLY in JSON, no extra text:
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <span className="rounded-full bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-100">🗑️ {result.bin}</span>
               <span className="rounded-full bg-green-500/15 px-4 py-2 text-sm font-semibold text-green-200 ring-1 ring-green-400/30">Confidence: {result.confidence}%</span>
+              <button
+                type="button"
+                onClick={() => speakResult(result.category, result.itemName)}
+                className="rounded-full bg-slate-950/60 px-4 py-2 text-sm font-semibold text-white ring-1 ring-slate-600 transition hover:bg-slate-800"
+              >
+                🔊 Hear Result
+              </button>
             </div>
           </div>
 
@@ -379,6 +534,39 @@ Reply ONLY in JSON, no extra text:
             </div>
           </div>
 
+          {impact && (
+            <div
+              className="mt-6 rounded-xl p-5 text-white"
+              style={{ background: 'linear-gradient(135deg, #064e3b, #16a34a)' }}
+            >
+              <h3 className="text-xl font-bold">🌍 Environmental Impact</h3>
+              <p className="mt-2 text-sm text-green-50">By recycling this item correctly:</p>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-white/10 p-3">
+                  <p className="text-sm text-green-50">💨 CO2 Saved</p>
+                  <h3 className="mt-1 text-2xl font-bold">{impact.co2Saved} kg</h3>
+                </div>
+                <div className="rounded-lg bg-white/10 p-3">
+                  <p className="text-sm text-green-50">💧 Water Saved</p>
+                  <h3 className="mt-1 text-2xl font-bold">{impact.waterSaved} litres</h3>
+                </div>
+                <div className="rounded-lg bg-white/10 p-3 sm:col-span-2">
+                  <p className="text-sm text-green-50">⚡ Energy Equivalent</p>
+                  <h3 className="mt-1 text-xl font-bold">{impact.energySaved}</h3>
+                </div>
+                <div className="rounded-lg bg-white/10 p-3 sm:col-span-2">
+                  <p className="text-sm text-green-50">🌳 Material Impact</p>
+                  <h3 className="mt-1 text-xl font-bold">{impact.treesEquivalent}</h3>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-lg bg-white/15 p-3 text-sm font-semibold">
+                💡 Did You Know? {impact.funFact}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={resetScanner}
@@ -386,6 +574,24 @@ Reply ONLY in JSON, no extra text:
           >
             Scan Another Item
           </button>
+        </section>
+      )}
+
+      {scanHistory.length > 0 && (
+        <section className="rounded-3xl border border-slate-700 bg-[#0f172a] p-4 shadow-xl md:p-6">
+          <h3 className="text-xl font-bold text-white">📋 Recent Scans</h3>
+          <div className="mt-4 space-y-2">
+            {scanHistory.map((scan, index) => (
+              <div
+                key={`${scan.time}-${scan.item}-${index}`}
+                className="flex flex-col gap-2 rounded-lg bg-[#1e293b] p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="font-semibold text-white">{scan.icon} {scan.item}</span>
+                <span className="text-green-500">+{scan.points} pts</span>
+                <span className="text-slate-500">{scan.time}</span>
+              </div>
+            ))}
+          </div>
         </section>
       )}
     </div>

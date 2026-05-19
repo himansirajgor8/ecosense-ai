@@ -18,6 +18,7 @@ import {
   notFoundMessage,
   searchCity
 } from '../api/waqi.js';
+import { formatCityName } from '../utils/city.js';
 
 const getThreatLevel = (aqi) => {
   if (aqi < 50) {
@@ -57,6 +58,20 @@ const generateAnomalyData = (basePM25) =>
       isAnomaly
     };
   });
+
+const calculateSources = (pm25, no2, co, pm10) => {
+  const industrial = Math.min(60, Math.round(pm25 / 2));
+  const vehicles = Math.min(40, Math.round(no2 * 2));
+  const biomass = Math.min(30, Math.round(co * 5));
+  const construction = Math.max(5, 100 - industrial - vehicles - biomass);
+
+  return {
+    industrial,
+    vehicles,
+    biomass,
+    construction
+  };
+};
 
 const generateThreats = (cityName, pm25) => [
   {
@@ -122,6 +137,34 @@ RECOMMENDATIONS:
 === END OF REPORT ===`;
 }
 
+const generateIncidentId = () => {
+  const num = Math.floor(10000 + Math.random() * 90000);
+  return `ECO-2026-${num}`;
+};
+
+function buildIncidentReport(incident, pm25) {
+  return `=== ECOSENSE AI INCIDENT RESPONSE REPORT ===
+Incident ID: #${incident.id}
+Threat Type: ${incident.threatType}
+Status: UNDER INVESTIGATION
+Priority: HIGH
+Expected Response: 15-30 minutes
+Timestamp: ${incident.timestamp}
+Location: ${incident.location}
+
+Reported To:
+- State Pollution Control Board
+- Local Municipal Authority
+- Environmental Task Force
+
+Threat Details:
+${incident.description}
+
+Current PM2.5: ${pm25} ug/m3
+
+=== END OF INCIDENT REPORT ===`;
+}
+
 function AnomalyDot(props) {
   const { cx, cy, payload } = props;
   if (!payload?.isAnomaly) return null;
@@ -155,15 +198,29 @@ function ThreatMonitor() {
   const [alertThreshold, setAlertThreshold] = useState(150);
   const [report, setReport] = useState('');
   const [showToast, setShowToast] = useState(false);
-  const [reportedThreats, setReportedThreats] = useState([]);
+  const [toastIncident, setToastIncident] = useState(null);
+  const [reportedThreats, setReportedThreats] = useState({});
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [activeIncident, setActiveIncident] = useState(null);
+  const [modalStatus, setModalStatus] = useState('connecting');
   const searchTimeout = useRef(null);
+  const modalStatusTimeout = useRef(null);
+  const toastTimeout = useRef(null);
   const selectedFeedRef = useRef('Delhi');
 
   const pm25 = Math.max(1, Math.round(airQuality?.pm25 || 72));
+  const no2 = Number(airQuality?.no2 || 0);
+  const co = Number(airQuality?.co ?? airQuality?.co2 ?? 0);
+  const pm10 = Number(airQuality?.pm10 || 0);
   const aqi = Number(airQuality?.aqi || pm25);
   const threatLevel = getThreatLevel(aqi);
   const anomalyData = useMemo(() => generateAnomalyData(pm25), [pm25]);
-  const threats = useMemo(() => generateThreats(selectedCity, pm25), [selectedCity, pm25]);
+  const displayCityName = formatCityName(selectedCity);
+  const threats = useMemo(() => generateThreats(displayCityName, pm25), [displayCityName, pm25]);
+  const pollutionSources = useMemo(
+    () => calculateSources(pm25, no2, co, pm10),
+    [pm25, no2, co, pm10]
+  );
   const securityMetrics = useMemo(
     () => ({
       threatsDetected: Math.floor(Math.random() * 6) + 3,
@@ -188,7 +245,7 @@ function ThreatMonitor() {
 
       setAirQuality(data);
       setSelectedCity(fallbackName);
-      setSearchQuery(fallbackName);
+      setSearchQuery(formatCityName(fallbackName));
       setLastUpdated(new Date());
 
       if (data.locationOnly) {
@@ -212,6 +269,11 @@ function ThreatMonitor() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => () => {
+    if (modalStatusTimeout.current) clearTimeout(modalStatusTimeout.current);
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+  }, []);
+
   useEffect(() => {
     const query = searchQuery.trim();
 
@@ -219,7 +281,7 @@ function ThreatMonitor() {
       clearTimeout(searchTimeout.current);
     }
 
-    if (query.length < 2 || query === selectedCity) {
+    if (query.length < 2 || query === selectedCity || query === formatCityName(selectedCity)) {
       setSuggestions([]);
       setSearching(false);
       return undefined;
@@ -296,16 +358,55 @@ function ThreatMonitor() {
     }
   };
 
-  const reportThreat = (threatId) => {
-    setReportedThreats((current) => (
-      current.includes(threatId) ? current : [...current, threatId]
-    ));
+  const reportThreat = (threat) => {
+    const existingIncident = reportedThreats[threat.id];
+    if (existingIncident) {
+      setActiveIncident(existingIncident);
+      setModalStatus('success');
+      setShowReportModal(true);
+      return;
+    }
+
+    const incident = {
+      id: generateIncidentId(),
+      threatId: threat.id,
+      threatType: threat.type,
+      description: threat.description,
+      timestamp: new Date().toLocaleString(),
+      location: displayCityName
+    };
+
+    setReportedThreats((current) => ({
+      ...current,
+      [threat.id]: incident
+    }));
+    setActiveIncident(incident);
+    setModalStatus('connecting');
+    setShowReportModal(true);
+
+    if (modalStatusTimeout.current) clearTimeout(modalStatusTimeout.current);
+    modalStatusTimeout.current = setTimeout(() => {
+      setModalStatus('success');
+    }, 1000);
+  };
+
+  const closeReportModal = () => {
+    setShowReportModal(false);
+
+    if (!activeIncident) return;
+
+    setToastIncident(activeIncident);
     setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
+
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    toastTimeout.current = setTimeout(() => {
+      setShowToast(false);
+      setToastIncident(null);
+    }, 3000);
   };
 
   const openReport = () => {
-    setReport(buildReport(selectedCity, pm25, new Date().toLocaleDateString()));
+    setReport(buildReport(displayCityName, pm25, new Date().toLocaleDateString()));
   };
 
   const copyReport = async () => {
@@ -322,10 +423,25 @@ function ThreatMonitor() {
     const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const safeCity = selectedCity.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    const safeCity = displayCityName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
 
     link.href = url;
     link.download = `ecosense-threat-report-${safeCity || 'city'}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadIncidentReport = () => {
+    if (!activeIncident) return;
+
+    const blob = new Blob([buildIncidentReport(activeIncident, pm25)], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `ecosense-incident-${activeIncident.id.toLowerCase()}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -365,7 +481,7 @@ function ThreatMonitor() {
                 }}
                 onKeyDown={handleSearchSubmit}
                 onBlur={() => setTimeout(() => { setSuggestions([]); setSelectedSuggestionIndex(-1); }, 150)}
-                placeholder="Enter any city..."
+                placeholder={`Search ${displayCityName || 'city'}...`}
                 spellCheck={false}
                 autoComplete="off"
                 className="w-full rounded-xl border border-green-300/30 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-green-400 focus:ring-2 focus:ring-green-400/30"
@@ -454,11 +570,12 @@ function ThreatMonitor() {
         <section>
           <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <h2 className="text-2xl font-bold">Threat Intelligence Alerts</h2>
-            <span className="text-sm text-slate-400">Incident Response queue for {selectedCity}</span>
+            <span className="text-sm text-slate-400">Incident Response queue for {displayCityName}</span>
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             {threats.map((threat) => {
-              const isReported = reportedThreats.includes(threat.id);
+              const incident = reportedThreats[threat.id];
+              const isReported = Boolean(incident);
 
               return (
                 <article key={threat.id} className="rounded-2xl border border-slate-700 bg-[#1e293b] p-5 shadow-xl">
@@ -478,13 +595,13 @@ function ThreatMonitor() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => reportThreat(threat.id)}
+                    onClick={() => reportThreat(threat)}
                     disabled={isReported}
                     className={`mt-5 w-full rounded-xl px-4 py-3 text-sm font-bold text-white transition ${
                       isReported ? 'cursor-not-allowed bg-slate-600' : 'bg-red-600 hover:bg-red-500'
                     }`}
                   >
-                    {isReported ? '✅ Reported!' : 'Report Threat'}
+                    {isReported ? `\u2705 Reported | ID: #${incident.id}` : 'Report Threat'}
                   </button>
                 </article>
               );
@@ -496,10 +613,10 @@ function ThreatMonitor() {
           <h2 className="text-2xl font-bold">Pollution Source Intelligence</h2>
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
-              ['🏭', 'Industrial Sources', 45],
-              ['🚗', 'Vehicle Emissions', 30],
-              ['🔥', 'Biomass Burning', 15],
-              ['🏗️', 'Construction Dust', 10]
+              ['🏭', 'Industrial Sources', pollutionSources.industrial],
+              ['🚗', 'Vehicle Emissions', pollutionSources.vehicles],
+              ['🔥', 'Biomass Burning', pollutionSources.biomass],
+              ['🏗️', 'Construction Dust', pollutionSources.construction]
             ].map(([icon, label, contribution]) => (
               <div key={label} className="rounded-xl border border-slate-700 bg-slate-950/40 p-4">
                 <div className="flex items-center gap-3">
@@ -509,7 +626,7 @@ function ThreatMonitor() {
                 <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-800">
                   <div
                     className="h-full rounded-full bg-green-500"
-                    style={{ width: `${Math.min(100, contribution + pm25 / 10)}%` }}
+                    style={{ width: `${Math.min(100, contribution)}%` }}
                   />
                 </div>
                 <p className="mt-3 text-sm text-slate-300">Contribution: {contribution}%</p>
@@ -598,11 +715,121 @@ function ThreatMonitor() {
           }}
         >
           <div>
-            ✅ Threat Reported to Authorities!
+            🛡️ Incident #{toastIncident?.id}
             <br />
-            📧 Alert sent to Pollution Control Board
-            <br />
-            🕐 Response time: 15-30 minutes
+            is being investigated
+          </div>
+        </div>
+      )}
+
+      {showReportModal && activeIncident && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              border: '2px solid #16a34a',
+              borderRadius: '12px',
+              padding: '30px',
+              maxWidth: '460px',
+              width: '100%',
+              color: 'white',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.45)'
+            }}
+          >
+            <h2 style={{ color: '#16a34a', fontSize: '24px', fontWeight: '900', margin: 0 }}>
+              🚨 Threat Report Submitted
+            </h2>
+
+            <p
+              style={{
+                color: modalStatus === 'success' ? '#86efac' : '#fde68a',
+                marginTop: '12px',
+                fontWeight: '700'
+              }}
+            >
+              {modalStatus === 'success' ? 'Report filed successfully!' : 'Connecting to authorities...'}
+            </p>
+
+            <div
+              style={{
+                background: '#0f172a',
+                padding: '16px',
+                borderRadius: '8px',
+                margin: '15px 0',
+                fontFamily: 'monospace',
+                fontSize: '13px',
+                lineHeight: 1.7
+              }}
+            >
+              <p style={{ margin: 0 }}>✅ REPORT SUCCESSFULLY FILED</p>
+              <p style={{ margin: '8px 0 0' }}>Incident ID: #{activeIncident.id}</p>
+              <p style={{ margin: '8px 0 0' }}>Status: UNDER INVESTIGATION 🔍</p>
+              <p style={{ margin: '8px 0 0' }}>Expected Response: 15-30 mins</p>
+              <p style={{ margin: '8px 0 0' }}>Priority: HIGH 🔴</p>
+              <p style={{ margin: '8px 0 0' }}>Timestamp: {activeIncident.timestamp}</p>
+              <p style={{ margin: '8px 0 0' }}>Location: {activeIncident.location}</p>
+            </div>
+
+            <p style={{ color: '#86efac', margin: '0 0 8px', fontWeight: '800' }}>
+              Reported To:
+            </p>
+            <p style={{ margin: '6px 0' }}>✅ State Pollution Control Board</p>
+            <p style={{ margin: '6px 0' }}>✅ Local Municipal Authority</p>
+            <p style={{ margin: '6px 0' }}>✅ Environmental Task Force</p>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+                marginTop: '22px',
+                flexWrap: 'wrap'
+              }}
+            >
+              <button
+                type="button"
+                onClick={downloadIncidentReport}
+                style={{
+                  background: '#16a34a',
+                  color: 'white',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                📥 Download Report
+              </button>
+              <button
+                type="button"
+                onClick={closeReportModal}
+                style={{
+                  background: '#ef4444',
+                  color: 'white',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                ✖ Close
+              </button>
+            </div>
           </div>
         </div>
       )}
