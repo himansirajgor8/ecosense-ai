@@ -44,7 +44,7 @@ function WasteScanner() {
     setLoading(true);
     try {
       const base64 = await fileToBase64(imageFile);
-      const response = await fetch('http://localhost:5000/api/classify', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/classify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
