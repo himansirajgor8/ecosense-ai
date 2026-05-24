@@ -1,15 +1,17 @@
 const teamMembers = [
   {
-    avatar: 'DEV',
-    name: 'Himansi Rajgor',
-    role: 'Frontend & AI Developer',
-    university: 'Parul University'
+    avatar: '\u{1F916}',
+    name: 'Rushil Parmar',
+    role: 'AI & Backend Developer',
+    description:
+      'AI student passionate about machine learning, data engineering, and building intelligent backend systems.'
   },
   {
-    avatar: 'DEV',
-    name: '(teammate name here)',
-    role: 'Backend & Data Developer',
-    university: 'Parul University'
+    avatar: '\u{1F510}',
+    name: 'Himansi Rajgor',
+    role: 'Cybersecurity & Frontend Developer',
+    description:
+      'Cybersecurity student who applied threat intelligence and anomaly detection concepts to environmental monitoring, combined with frontend development.'
   }
 ];
 
@@ -17,11 +19,13 @@ const techStack = [
   'React.js',
   'Python Flask',
   'WAQI API',
-  'Gemini AI',
+  'Groq AI',
   'Leaflet Maps',
   'Recharts',
   'Tailwind CSS',
-  'Nominatim API'
+  'Nominatim API',
+  'Vercel',
+  'Render.com'
 ];
 
 function About() {
@@ -51,7 +55,7 @@ function About() {
               <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/15 text-sm font-bold text-green-200 ring-1 ring-green-400/30">{member.avatar}</div>
               <h3 className="mt-5 text-2xl font-bold text-white">{member.name}</h3>
               <p className="mt-2 text-lg font-semibold text-green-300">{member.role}</p>
-              <p className="mt-2 text-slate-300">{member.university}</p>
+              <p className="mt-3 leading-7 text-slate-300">{member.description}</p>
             </div>
           ))}
         </div>
@@ -71,9 +75,12 @@ function About() {
       <section className="rounded-3xl border border-slate-700 bg-[#1e293b] p-6 shadow-xl md:p-8">
         <h2 className="text-2xl font-bold text-green-300 md:text-3xl">Contact</h2>
         <div className="mt-5 space-y-3 break-words text-base font-medium text-slate-300 md:text-lg">
-          <p>SPOC: Himansi Rajgor</p>
-          <p>Phone: 6354847928</p>
-          <p>Organized by: Technical Events Cell & Centre for Sustainability & ESG</p>
+          <p className="font-semibold text-white">Team Contact:</p>
+          <p>{'\u{1F464}'} Himansi Rajgor</p>
+          <p>{'\u{1F4DE}'} 6354847928</p>
+          <p>{'\u{1F4E7}'} himansirajgor616@gmail.com</p>
+          <p className="pt-3 font-semibold text-white">Organized by:</p>
+          <p>Parul University</p>
         </div>
       </section>
     </div>
