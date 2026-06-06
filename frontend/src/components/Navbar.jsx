@@ -6,7 +6,6 @@ const links = [
   { label: 'Monitor', to: '/monitor' },
   { label: 'Waste Scan', to: '/waste-scan' },
   { label: 'Threat Monitor', to: '/threat-monitor' },
-  { label: 'About', to: '/about' }
 ];
 
 function Navbar() {
