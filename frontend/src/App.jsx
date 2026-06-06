@@ -4,7 +4,6 @@ import Home from './pages/Home.jsx';
 import Monitor from './pages/Monitor.jsx';
 import WasteScan from './pages/WasteScan.jsx';
 import ThreatMonitor from './pages/ThreatMonitor.jsx';
-import About from './pages/About.jsx';
 import CityDetail from './pages/CityDetail.jsx';
 
 function App() {
@@ -18,7 +17,6 @@ function App() {
           <Route path="/city/:cityname" element={<CityDetail />} />
           <Route path="/waste-scan" element={<WasteScan />} />
           <Route path="/threat-monitor" element={<ThreatMonitor />} />
-          <Route path="/about" element={<About />} />
         </Routes>
       </main>
       <footer className="border-t border-slate-700 bg-[#1e293b] px-4 py-5 text-center text-sm font-medium text-green-300 shadow-inner">
